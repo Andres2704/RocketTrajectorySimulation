@@ -17,7 +17,7 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
 
-# Interpolação dos dados aerodinâmicos empíricos, utilizados para o arrasto com alfa>0
+# Aerodyanamic data interp for AOA > 0 wich affects the drag coefficient
 x_cd = np.array([4, 6, 8, 10, 12, 14, 16, 18, 20])
 y_eta = np.array([0.6, 0.6193, 0.6605, 0.6835, 0.7107, 0.7263, 0.7421, 0.7535, 0.7636])
 y_del = np.array([0.7802, 0.8598, 0.9196, 0.9396, 0.96, 0.97, 0.9764, 0.9817, 0.9856])
@@ -25,7 +25,7 @@ cs_eta = CubicSpline(x_cd, y_eta)
 cs_del = CubicSpline(x_cd, y_del)
 
 
-# Funções utilizadas frequentemente
+# Common used functions
 def cos(a):
     return np.cos(a)
 
@@ -35,21 +35,22 @@ def sen(a):
 def tan(a):
     return np.tan(a)
 
-# Para os propósitos de cáculos, é assumido que o veículo é axissimétrico
-# e o CM dele e suas componentes pertencem ao eixo de simetria (x no ref do corpo)
-# (Estima-se o parâmetros dinâmicos e aerodinâmicos desse veículo passivamente controlado)
+# For the calculations, it is assumed that the vehicle is axisimetric
+# and the CG and its componentes remain in the axis of symmetry (x in B-ref)
 class simulation():
+    # Class used to construct the simulations configuration, such as global
+    # parameters.
     def __init__(self, **kwargs):
-        self.drogue_chute       = kwargs.get('add_drogue')
-        self.main_chute         = kwargs.get('add_main')
-        self.motor_missalign    = kwargs.get('add_miss')
-        self.step               = kwargs.get('step_time')
-        self.tol                = kwargs.get('tolerance')
-        self.wind               = kwargs.get('add_wind')
-        self.plot_trajectory    = kwargs.get('plot_3dtraj')
-        self.plot_t_trajectory  = kwargs.get('plot_result')
-        self.save               = kwargs.get('save_result')
-        self.save_name          = kwargs.get('save_name')
+        self.drogue_chute       = kwargs.get('add_drogue')                      # Variable to add drogue parachute (True or False)
+        self.main_chute         = kwargs.get('add_main')                        # Variable to add main parachute (True or False)
+        self.motor_missalign    = kwargs.get('add_miss')                        # Variable to add motor missaligment (True or False)
+        self.wind               = kwargs.get('add_wind')                        # Variable to add wind  (True or False)
+        self.plot_trajectory    = kwargs.get('plot_3dtraj')                     # Variable to plot X, Y, Z trajectory  (True or False)
+        self.plot_t_trajectory  = kwargs.get('plot_result')                     # Variable to plot time properties  (True or False)
+        self.save               = kwargs.get('save_result')                     # Variable to save the results in to a sheet file (True or False)
+        self.step               = kwargs.get('step_time')                       # Initial step-time for the solver
+        self.tol                = kwargs.get('tolerance')                       # Tolerance accepted for the RK felhberg solver
+        self.save_name          = kwargs.get('save_name')                       # Filename to save the results in a sheet data
 
     def motormissalign(self, **kwargs):
         if self.motor_missalign:
@@ -142,7 +143,7 @@ class rocket():
         self.Cr         = kwargs.get('Root_chord')                                                          # Corda na raíz
         self.b          = kwargs.get('semi_span')                                                          # (span)
         self.tick       = kwargs.get('max_tick')
-        self.sweep_angle= np.deg2rad(kwargs.get('sweep'))                                                      # Espessura
+        self.sweep_angle= np.arctan((self.Cr-self.Ct)/self.b)                                                     # Espessura
         # self.X_tc_av    = 0.3
         self.S          = (self.Ct+self.Cr)*self.b/2                                     # Área planar
         self.AR         = self.b**2/self.S                                                   # Aspect Ratio
@@ -164,7 +165,7 @@ class rocket():
         prop_data[0][0] = 0.0
         if type.lower() == 'solid':
             self.t      = prop_data[:,0]                                                        # Tempo de empuxo
-            Mdot        = prop_data[:,1]                                                      # Fluxo mássico de combustível
+            M_dot       = prop_data[:,1]                                                      # Fluxo mássico de combustível
             self.T      = prop_data[:,2]                                                         # Empuxo
             self.M      = np.array([self.Mi])
             k           = self.t[1]-self.t[0]
@@ -305,7 +306,7 @@ class aerodynamic():
       # Fins part ------------------------------------------------------------------------------
 
       # Mid chord calc
-      thet = 53.1*np.pi/180
+      thet = launch_vehicle.sweep_angle
       Lf = np.sqrt(launch_vehicle.b**2 + (0.5*launch_vehicle.Ct - 0.5*launch_vehicle.Cr + launch_vehicle.b/tan(thet))**2)
 
       # Cna fin
@@ -333,8 +334,10 @@ class aerodynamic():
       CNa = Cna_fins + Cna_nose + Cna_L
       Xcp = (Cna_fins*Xcp_f + Cna_nose*Xcp_nose + Cna_L*Xcp_body)/(CNa)
 
+      # Coeficientes laterais
       Cy = CNa*beta
       Cz = CNa*alfa
+
       Xsm = (Xcp - Xcm)/launch_vehicle.de
 
       ## Coeficientes de MOMENTO
@@ -449,8 +452,8 @@ class six_dof():
 
     def initialize(self, sim):
         # Propulsion and structural information
-        self.T = self.rocket.T
-        self.M = self.rocket.M
+        self.T   = self.rocket.T
+        self.M   = self.rocket.M
         self.Ixx = self.rocket.Ixx
         self.Iyy = self.rocket.Iyy
         self.Izz = self.rocket.Izz
@@ -611,6 +614,9 @@ class six_dof():
                 if self.is_burntime == False:
                     self.burn_height = [self.x[i], self.y[i], self.z[i]]
                 self.is_burntime = True
+                # O centro de pressão é calculado em relação a ponta do foguete (ponta do nose)
+                # E o cálculo do CM é feito com relação a parte inferior do foguete
+                # Portanto, a posição de referência do cm é corrigida para calcular a margem estática
                 xcm = self.rocket.FusLength + self.rocket.NoseLength - self.Xcm[-1]
                 self.t = np.append(self.t, self.t[i] + self.k)
             else:
@@ -623,6 +629,9 @@ class six_dof():
                 Jx = self.Ixx_Interp(self.t[i])
                 Jy = self.Iyy_Interp(self.t[i])
                 Jz = Jy
+                # O centro de pressão é calculado em relação a ponta do foguete (ponta do nose)
+                # E o cálculo do CM é feito com relação a parte inferior do foguete
+                # Portanto, a posição de referência do cm é corrigida para calcular a margem estática
                 xcm = self.rocket.FusLength + self.rocket.NoseLength - xcm
                 self.t = np.append(self.t, self.t[i] + self.k)
 
@@ -637,11 +646,9 @@ class six_dof():
                 # Cd - Coef. de arrasto; Cn - Coef. de força normal; Ca - Coef. de força axial
                 # Cs - Coef. de força lateral
                 Xcp, Cx, Cy, Cz, Cl, Cm, Cn = aerodynamic(self.rocket, self.Va[i], rho, Ma, xcm, self.p[i], self.q[i], self.r[i], self.alpha[i], self.beta[i], self.delta).forcecoeff
-                Xcp = Xcp + self.d_Xcp/100
                 self.DragCoeff = np.append(self.DragCoeff, Cx)
-                # O centro de pressão é calculado em relação a ponta do foguete (ponta do nose)
-                # E o cálculo do CM é feito com relação a parte inferior do foguete
-                # Portanto, a posição de referência do cm é corrigida para calcular a margem estática
+                # d_Xcp é o desvio devido a incertezas
+                Xcp = Xcp + self.d_Xcp/100
                 Cl, Cm, Cn = 0, 0, 0
 
                 # Pressão dinâmica * area

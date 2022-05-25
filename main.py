@@ -39,13 +39,13 @@ launch_vehicle.initial(
 sim = simulation(
     step_time   = 0.0005,               # Step-time [s]
     tolerance   = 1E-6,                 # Tolerance
-    add_wind    = True,                 # Add wind in the simulation
+    add_wind    = False,                 # Add wind in the simulation
     add_miss    = True,                 # Add motor missalignment
     add_drogue  = True,                 # Add Drogue Chute
     add_main    = True,                 # Add Main Chute
     plot_3dtraj = True,                 # Plot 3D Trajectory
     plot_result = True,                 # Plot the results
-    save_result = True,                 # Save the results in a sheet file
+    save_result = False,                 # Save the results in a sheet file
     save_name   = 'output.xlsx'         # Save name
 )
 
@@ -107,7 +107,6 @@ launch_vehicle.fins(
     Root_chord  = 0.21,        # Chord at the root [m]
     semi_span   = 0.12,        # Fin semi-span [m]
     max_tick    = 0.0231,      # Max tickness [m]
-    sweep       = 51.3,        # Sweep angle [deg]
 )
 
 # ------------------------------------------------------------------------------
